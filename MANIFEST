@@ -1,0 +1,21 @@
+Changes
+lib/Net/Evernote.pm
+lib/Net/EDAMTypes/Constants.pm
+lib/Net/EDAMTypes/Types.pm
+lib/Net/EDAMErrors/Constants.pm
+lib/Net/EDAMErrors/Types.pm
+lib/Net/EDAMLimits/Constants.pm
+lib/Net/EDAMLimits/Types.pm
+lib/Net/EDAMUserStore/UserStore.pm
+lib/Net/EDAMUserStore/Constants.pm
+lib/Net/EDAMUserStore/Types.pm
+lib/Net/EDAMNoteStore/Constants.pm
+lib/Net/EDAMNoteStore/NoteStore.pm
+lib/Net/EDAMNoteStore/Types.pm
+Makefile.PL
+MANIFEST			This list of files
+README
+t/00-load.t
+t/manifest.t
+t/pod-coverage.t
+t/pod.t
