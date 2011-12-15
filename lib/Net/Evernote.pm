@@ -21,7 +21,7 @@ use EDAMErrors::Types;
 use EDAMLimits::Types;  
 use EDAMTypes::Types;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 sub new {
     my $class = shift;
@@ -51,6 +51,15 @@ sub postNote {
     my $content = shift;
     my $dataUrl = shift || "https://sandbox.evernote.com/edam/note";
 
+    $content =~ s/\n/<br\/>/g;
+    my $cont_encoded =<<EOF;
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">
+<en-note>
+    $content
+</en-note>
+EOF
+
     my $authToken = $self->{authToken};
     my $shardId = $self->{shardId};
 
@@ -62,7 +71,9 @@ sub postNote {
 
     $transport->open;
 
-    my $note = EDAMTypes::Note->new({title=>$title, content=>$content});
+    my $note = EDAMTypes::Note->new({ title => $title, 
+                                      content => $cont_encoded,
+                                    });
 
     $client->createNote($authToken,$note);
 }
@@ -78,9 +89,7 @@ Net::Evernote - Perl client accessing to Evernote
 
 =head1 VERSION
 
-Version 0.01
-
-The very begin version, welcome anyone who has interest to join the development team.
+Version 0.02
 
 
 =head1 SYNOPSIS
@@ -110,6 +119,14 @@ For accessing them, Net::SSLeay and Crypt::SSLeay along with Thrift module are n
 
     use Data::Dumper;
 
+    my $title = "my first note";
+    my $content =<<EOF;
+I wrote some Perl to say hello,
+To a world i did not know.
+Prepended line numbers there in tow,
+I basically told it where to go.
+EOF
+
     eval {
         $note->postNote($title,$content);
     };
@@ -118,7 +135,7 @@ For accessing them, Net::SSLeay and Crypt::SSLeay along with Thrift module are n
         print Dumper $@;
     }
 
-The title is a common string. The content is a XHTML string.
+Both the title and content are strings.
 
 The dataStoreUrl is the url for posting note, the default one is https://sandbox.evernote.com/edam/note
 
@@ -135,6 +152,8 @@ http://www.evernote.com/about/developer/api/
 =head1 AUTHOR
 
 Ken Peng <shorttag@gmail.com>
+
+I wish any people who has the interest in this module to work together with it.
 
 
 =head1 BUGS/LIMITATIONS
