@@ -21,7 +21,7 @@ use EDAMErrors::Types;
 use EDAMLimits::Types;  
 use EDAMTypes::Types;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 sub new {
     my $class = shift;
@@ -89,46 +89,47 @@ Net::Evernote - Perl client accessing to Evernote
 
 =head1 VERSION
 
-Version 0.02
+Version 0.03
 
 
 =head1 SYNOPSIS
 
     use Net::Evernote;
-    my $note = Net::Evernote->new($username,$password,$consumerKey,$consumerSecret);
-    $note->postNote($title,$content);
+    my $note = Net::Evernote->new($username, $password, $consumerKey, $consumerSecret);
+    $note->postNote($title, $content);
 
 
 =head1 METHODS
 
-=head2 new(username,password,consumerKey,consumerSecret,[userStoreUrl])
+=head2 new(username, password, consumerKey, consumerSecret, [userStoreUrl])
 
 Initialize the object.
 
-    my $note = Net::Evernote->new($username,$password,$consumerKey,$consumerSecret);
+    my $note = Net::Evernote->new("fooUser", "fooPasswd", "fooKey", "fooSecret");
 
-The consumerKey and consumerSecret are got from the email when you signed up with Evernote's API development.
+username and password are what you use for login into Evernote.
 
-The userStoreUrl is the url for user authentication, the default one is https://sandbox.evernote.com/edam/user
+consumerKey and consumerSecret are got from the email when you signed up to Evernote's API development.
+
+userStoreUrl is the url for user authentication, the default one is https://sandbox.evernote.com/edam/user
 
 If you are in the production development, userStoreUrl should be https://www.evernote.com/edam/user
 
-For accessing them, Net::SSLeay and Crypt::SSLeay along with Thrift module are needed.
 
-=head2 postNote(title,content,[dataStoreUrl])
+=head2 postNote(title, content, [dataStoreUrl])
 
     use Data::Dumper;
 
-    my $title = "my first note";
+    my $title = "my Perl poem";
     my $content =<<EOF;
 I wrote some Perl to say hello,
-To a world i did not know.
+To a world I did not know.
 Prepended line numbers there in tow,
 I basically told it where to go.
 EOF
 
     eval {
-        $note->postNote($title,$content);
+        $note->postNote($title, $content);
     };
 
     if ($@) {
@@ -137,16 +138,14 @@ EOF
 
 Both the title and content are strings.
 
-The dataStoreUrl is the url for posting note, the default one is https://sandbox.evernote.com/edam/note
+dataStoreUrl is the url for posting note, the default one is https://sandbox.evernote.com/edam/note
 
 If you are in the production development, dataStoreUrl should be https://www.evernote.com/edam/note
-
-For accessing them, Net::SSLeay and Crypt::SSLeay along with Thrift module are needed.
 
 
 =head1 SEE ALSO
 
-http://www.evernote.com/about/developer/api/
+    http://www.evernote.com/about/developer/api/
 
 
 =head1 AUTHOR

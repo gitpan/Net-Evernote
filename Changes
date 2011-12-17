@@ -1,5 +1,8 @@
 Revision history for Net-Evernote
 
+0.03    2011-12-17
+        update the dependence
+
 0.02    2011-12-15
         Make the content string ENML compatible
 
