@@ -21,7 +21,7 @@ use EDAMErrors::Types;
 use EDAMLimits::Types;  
 use EDAMTypes::Types;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 sub new {
     my $class = shift;
@@ -78,6 +78,25 @@ EOF
     $client->createNote($authToken,$note);
 }
 
+sub delNote {
+    my $self = shift;
+    my $guid = shift;
+    my $dataUrl = shift || "https://sandbox.evernote.com/edam/note";
+
+    my $authToken = $self->{authToken};
+    my $shardId = $self->{shardId};
+
+    $dataUrl .= "/" . $shardId;
+
+    my $transport = Thrift::HttpClient->new($dataUrl);
+    my $protocol  = Thrift::XS::BinaryProtocol->new($transport);
+    my $client    = EDAMNoteStore::NoteStoreClient->new($protocol);
+
+    $transport->open;
+
+    $client->deleteNote($authToken,$guid);
+}
+
 
 1;
 
@@ -89,14 +108,15 @@ Net::Evernote - Perl client accessing to Evernote
 
 =head1 VERSION
 
-Version 0.03
+Version 0.04
 
 
 =head1 SYNOPSIS
 
     use Net::Evernote;
     my $note = Net::Evernote->new($username, $password, $consumerKey, $consumerSecret);
-    $note->postNote($title, $content);
+    my $res = $note->postNote($title, $content);
+    $note->delNote($res->guid);
 
 
 =head1 METHODS
@@ -128,12 +148,18 @@ Prepended line numbers there in tow,
 I basically told it where to go.
 EOF
 
+    my ($res,$guid);
+
     eval {
-        $note->postNote($title, $content);
+        $res = $note->postNote($title, $content);
     };
 
     if ($@) {
         print Dumper $@;
+
+    } else {
+        $guid = $res->guid;
+        print "GUID I got for this note is $guid\n";
     }
 
 Both the title and content are strings.
@@ -142,10 +168,36 @@ dataStoreUrl is the url for posting note, the default one is https://sandbox.eve
 
 If you are in the production development, dataStoreUrl should be https://www.evernote.com/edam/note
 
+About GUID: Most data elements within a user's account (e.g. notebooks, notes, tags, resources, etc.) 
+are internally referred to using a globally unique identifier that is written in 
+a standard string format, for example, "8743428c-ef91-4d05-9e7c-4a2e856e813a".
+
+
+=head2 delNote(guid, [dataStoreUrl])
+
+    use Data::Dumper;
+
+    eval {
+        $note->delNote($guid);
+    };
+
+    if ($@) {
+        print Dumper $@;
+
+    } else {
+        print "note with GUID $guid deleted\n";
+    }
+    
+guid is the globally unique identifier for the note.
+
+dataStoreUrl is the url for posting note, the default one is https://sandbox.evernote.com/edam/note
+
+If you are in the production development, dataStoreUrl should be https://www.evernote.com/edam/note
+
 
 =head1 SEE ALSO
 
-    http://www.evernote.com/about/developer/api/
+http://www.evernote.com/about/developer/api/
 
 
 =head1 AUTHOR

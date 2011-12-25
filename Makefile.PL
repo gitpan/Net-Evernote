@@ -14,9 +14,9 @@ WriteMakefile(
     PL_FILES            => {},
     PREREQ_PM => {
         'Test::More' => 0,
-        'LWP::UserAgent' => 1,
+        'LWP::UserAgent' => 0,
         'Crypt::SSLeay' => 0,
-        'Thrift::XS' => 1,
+        'Thrift::XS' => 0,
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => 'Net-Evernote-*' },

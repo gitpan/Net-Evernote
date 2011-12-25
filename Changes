@@ -1,5 +1,8 @@
 Revision history for Net-Evernote
 
+0.04    2011-12-25
+        add the delNote method
+
 0.03    2011-12-17
         update the dependence
 
