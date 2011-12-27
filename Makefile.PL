@@ -15,6 +15,7 @@ WriteMakefile(
     PREREQ_PM => {
         'Test::More' => 0,
         'LWP::UserAgent' => 0,
+        'IO::String' => 0,
         'Crypt::SSLeay' => 0,
         'Thrift::XS' => 0,
     },

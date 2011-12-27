@@ -21,7 +21,7 @@ use EDAMErrors::Types;
 use EDAMLimits::Types;  
 use EDAMTypes::Types;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 sub new {
     my $class = shift;
@@ -97,6 +97,24 @@ sub delNote {
     $client->deleteNote($authToken,$guid);
 }
 
+sub getNote {
+    my $self = shift;
+    my $guid = shift;
+    my $dataUrl = shift || "https://sandbox.evernote.com/edam/note";
+
+    my $authToken = $self->{authToken};
+    my $shardId = $self->{shardId};
+
+    $dataUrl .= "/" . $shardId;
+
+    my $transport = Thrift::HttpClient->new($dataUrl);
+    my $protocol  = Thrift::XS::BinaryProtocol->new($transport);
+    my $client    = EDAMNoteStore::NoteStoreClient->new($protocol);
+
+    $transport->open;
+
+    $client->getNote($authToken,$guid,1);
+}
 
 1;
 
@@ -108,14 +126,23 @@ Net::Evernote - Perl client accessing to Evernote
 
 =head1 VERSION
 
-Version 0.04
+Version 0.05
 
 
 =head1 SYNOPSIS
 
     use Net::Evernote;
     my $note = Net::Evernote->new($username, $password, $consumerKey, $consumerSecret);
+
+    # write a note
     my $res = $note->postNote($title, $content);
+
+    # get the note
+    my $thisNote = $note->getNote($res->guid);
+    print $thisNote->title,"\n";
+    print $thisNote->content,"\n";
+
+    # delete the note
     $note->delNote($res->guid);
 
 
@@ -137,6 +164,8 @@ If you are in the production development, userStoreUrl should be https://www.eve
 
 
 =head2 postNote(title, content, [dataStoreUrl])
+
+Write a note to Evernote's server.
 
     use Data::Dumper;
 
@@ -164,7 +193,7 @@ EOF
 
 Both the title and content are strings.
 
-dataStoreUrl is the url for posting note, the default one is https://sandbox.evernote.com/edam/note
+dataStoreUrl is the url for handling note, the default one is https://sandbox.evernote.com/edam/note
 
 If you are in the production development, dataStoreUrl should be https://www.evernote.com/edam/note
 
@@ -173,7 +202,36 @@ are internally referred to using a globally unique identifier that is written in
 a standard string format, for example, "8743428c-ef91-4d05-9e7c-4a2e856e813a".
 
 
+=head2 getNote(guid, [dataStoreUrl])
+
+Get the note from the server.
+
+    use Data::Dumper;
+    my $thisNote;
+
+    eval {
+        $thisNote = $note->getNote($guid);
+    };
+
+    if ($@) {
+        print Dumper $@;
+
+    } else {
+        print $thisNote->title,"\n";
+        print $thisNote->content,"\n";
+    }
+
+guid is the globally unique identifier for the note.
+
+For the content returned, you must know that they are ENML compatible.
+More stuff about ENML please see:
+
+http://www.evernote.com/about/developer/api/evernote-api.htm#_Toc297053072
+
+
 =head2 delNote(guid, [dataStoreUrl])
+
+Delete the note from Evernote's server.
 
     use Data::Dumper;
 
@@ -189,10 +247,6 @@ a standard string format, for example, "8743428c-ef91-4d05-9e7c-4a2e856e813a".
     }
     
 guid is the globally unique identifier for the note.
-
-dataStoreUrl is the url for posting note, the default one is https://sandbox.evernote.com/edam/note
-
-If you are in the production development, dataStoreUrl should be https://www.evernote.com/edam/note
 
 
 =head1 SEE ALSO
