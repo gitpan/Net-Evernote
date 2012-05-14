@@ -21,7 +21,7 @@ use EDAMErrors::Types;
 use EDAMLimits::Types;  
 use EDAMTypes::Types;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 sub new {
     my $class = shift;
@@ -45,7 +45,7 @@ sub new {
           }, $class;
 }
 
-sub postNote {
+sub writeNote {
     my $self = shift;
     my $title = shift;
     my $content = shift;
@@ -116,8 +116,30 @@ sub getNote {
     $client->getNote($authToken,$guid,1);
 }
 
-1;
+sub findNotes {
+    my $self = shift;
+    my $string = shift;
+    my $offset = shift || 0;
+    my $maxNotes = shift || 1;
+    my $dataUrl = shift || "https://sandbox.evernote.com/edam/note";
 
+    my $authToken = $self->{authToken};
+    my $shardId = $self->{shardId};
+
+    $dataUrl .= "/" . $shardId;
+    my $stru = EDAMNoteStore::NoteFilter->new({ words => $string });
+
+    my $transport = Thrift::HttpClient->new($dataUrl);
+    my $protocol  = Thrift::XS::BinaryProtocol->new($transport);
+    my $client    = EDAMNoteStore::NoteStoreClient->new($protocol);
+
+    $transport->open;
+
+    $client->findNotes($authToken,$stru,$offset,$maxNotes);
+}
+
+
+1;
 
 =head1 NAME
 
@@ -126,7 +148,7 @@ Net::Evernote - Perl client accessing to Evernote
 
 =head1 VERSION
 
-Version 0.05
+Version 0.06
 
 
 =head1 SYNOPSIS
@@ -135,16 +157,23 @@ Version 0.05
     my $note = Net::Evernote->new($username, $password, $consumerKey, $consumerSecret);
 
     # write a note
-    my $res = $note->postNote($title, $content);
+    my $res = $note->writeNote($title, $content);
+    my $guid = $res->guid;
 
     # get the note
-    my $thisNote = $note->getNote($res->guid);
+    my $thisNote = $note->getNote($guid);
     print $thisNote->title,"\n";
     print $thisNote->content,"\n";
 
     # delete the note
-    $note->delNote($res->guid);
+    $note->delNote($guid);
 
+    # find notes
+    my $search = $note->findNotes("some words",0,5);
+    for my $thisNote ( @{$search->notes} ) {
+        print $thisNote->guid,"\n";
+        print $thisNote->title,"\n";
+    }
 
 =head1 METHODS
 
@@ -163,7 +192,7 @@ userStoreUrl is the url for user authentication, the default one is https://sand
 If you are in the production development, userStoreUrl should be https://www.evernote.com/edam/user
 
 
-=head2 postNote(title, content, [dataStoreUrl])
+=head2 writeNote(title, content, [dataStoreUrl])
 
 Write a note to Evernote's server.
 
@@ -180,7 +209,7 @@ EOF
     my ($res,$guid);
 
     eval {
-        $res = $note->postNote($title, $content);
+        $res = $note->writeNote($title, $content);
     };
 
     if ($@) {
@@ -249,6 +278,32 @@ Delete the note from Evernote's server.
 guid is the globally unique identifier for the note.
 
 
+=head2 findNotes(keywords, offset, maxNotes, [dataStoreUrl])
+
+Find the notes which contain the given keywords.
+
+    use Data::Dumper;
+    my $search;
+
+    eval {
+        $search = $note->findNotes("some words",0,5);
+    };
+
+    if ($@) {
+        print Dumper $@;
+
+    } else {
+        for my $thisNote ( @{$search->notes} ) {
+            print $thisNote->guid,"\n";
+            print $thisNote->title,"\n";
+        }
+    }
+
+offset - The numeric index of the first note to show within the sorted results, default 0
+
+maxNotes - The most notes to return in this query, default 1
+
+
 =head1 SEE ALSO
 
 http://www.evernote.com/about/developer/api/
@@ -256,14 +311,14 @@ http://www.evernote.com/about/developer/api/
 
 =head1 AUTHOR
 
-Ken Peng <shorttag@gmail.com>
+Ken Peng <yhpeng@cpan.org>
 
 I wish any people who has the interest in this module to work together with it.
 
 
 =head1 BUGS/LIMITATIONS
 
-If you have found bugs, please send email to <shorttag@gmail.com>
+If you have found bugs, please send email to <yhpeng@cpan.org>
 
 
 =head1 SUPPORT
