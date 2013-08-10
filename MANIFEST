@@ -11,10 +11,10 @@ lib/Net/EDAMTypes/Types.pm
 lib/Net/EDAMUserStore/Constants.pm
 lib/Net/EDAMUserStore/Types.pm
 lib/Net/EDAMUserStore/UserStore.pm
-lib/Net/Evernote/Note.pm
 lib/Net/Evernote.pm
-lib/Net/Notebook.pm
-lib/Net/Tag.pm
+lib/Net/Evernote/Note.pm
+lib/Net/Evernote/Notebook.pm
+lib/Net/Evernote/Tag.pm
 lib/Net/Thrift/BinaryProtocol.pm
 lib/Net/Thrift/BufferedTransport.pm
 lib/Net/Thrift/FramedTransport.pm
@@ -34,3 +34,5 @@ t/02-notebook.t
 t/03-tag.t
 t/Common.pm
 t/manifest.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)
