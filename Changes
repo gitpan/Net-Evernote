@@ -1,5 +1,8 @@
 Revision history for Net-Evernote
 
+0.07    2013-08-09
+	added tests and methods. See t/
+
 0.06    2012-5-13
         add the findNotes method
 

@@ -5,7 +5,7 @@ use ExtUtils::MakeMaker;
 
 WriteMakefile(
     NAME                => 'Net::Evernote',
-    AUTHOR              => q{Ken Peng <shorttag@gmail.com>},
+    AUTHOR              => q{David Collins<davidcollins4481@gmail.com>, Ken Peng <shorttag@gmail.com>},
     VERSION_FROM        => 'lib/Net/Evernote.pm',
     ABSTRACT_FROM       => 'lib/Net/Evernote.pm',
     ($ExtUtils::MakeMaker::VERSION >= 6.3002

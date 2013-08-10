@@ -6,53 +6,109 @@ BEGIN {
     unshift @INC,$module_dir;
 }
 
-use 5.006;
 use warnings;
 use strict;
-use Thrift;
+use Exception::Class (
+    'EDAMTest::Exception::ExceptionWrapper',
+    'EDAMTest::Exception::FileIOError',
+);
+
+use LWP::Protocol::https; # it is not needed to 'use' here, but it must be installed.
+        # if it is not installed, an error (Thrift::TException object) is to be thrown.
 use Thrift::HttpClient;
-use Thrift::XS::BinaryProtocol;
-
+use Thrift::BinaryProtocol;
+use EDAMTypes::Types;  # you must do `use' EDAMTypes::Types and EDAMErrors::Types
+use EDAMErrors::Types; # before doing `use' EDAMUserStore::UserStore or EDAMNoteStore::NoteStore
 use EDAMUserStore::UserStore;
-use EDAMUserStore::Types;
 use EDAMNoteStore::NoteStore;
-use EDAMNoteStore::Types;
-use EDAMErrors::Types;
-use EDAMLimits::Types;  
-use EDAMTypes::Types;
-
+use EDAMUserStore::Constants;
+use Evernote::Note;
+use Evernote::Tag;
+use Evernote::Notebook;
 our $VERSION = '0.06';
 
 sub new {
-    my $class = shift;
-    my $username = shift;
-    my $password = shift;
-    my $consumerKey = shift;
-    my $consumerSecret = shift;
-    my $authUrl = shift || "https://sandbox.evernote.com/edam/user";
+    my ($class, $args) = @_;
+    my $authentication_token = $$args{authentication_token};
+    my $debug = $ENV{DEBUG};
+    my $evernote_host;
 
-    my $transport = Thrift::HttpClient->new($authUrl);
-    my $protocol  = Thrift::XS::BinaryProtocol->new($transport);
-    my $client    = EDAMUserStore::UserStoreClient->new($protocol);
+    if ($$args{use_sandbox}) {
+        $evernote_host = 'sandbox.evernote.com';
+    } else {
+        $evernote_host = 'www.evernote.com';
+    }
 
-    $transport->open;
+    my $user_store_url = 'https://' . $evernote_host . '/edam/user';
+    my $result;
+    my $note_store;
 
-    my $re = $client->authenticate($username,$password,$consumerKey,$consumerSecret);
+    eval {
 
-    bless { 
-            authToken => $re->authenticationToken,
-            shardId   => $re->user->shardId,
-          }, $class;
+        local $SIG{__DIE__} = sub {
+            my ( $err ) = @_;
+            if ( not ( blessed $err && $err->isa('Exception::Class::Base') ) ) {
+                EDAMTest::Exception::ExceptionWrapper->throw( error => $err );
+            }
+        };
+
+        my $user_store_client = Thrift::HttpClient->new( $user_store_url );
+        # default timeout value may be too short
+        $user_store_client->setSendTimeout( 2000 );
+        $user_store_client->setRecvTimeout( 10000 );
+        my $user_store_prot = Thrift::BinaryProtocol->new( $user_store_client );
+        my $user_store = EDAMUserStore::UserStoreClient->new( $user_store_prot, $user_store_prot );
+
+        my $version_ok = $user_store->checkVersion( 'Evernote EDAMTest (Perl)',
+            EDAMUserStore::Constants::EDAM_VERSION_MAJOR,
+            EDAMUserStore::Constants::EDAM_VERSION_MINOR );
+
+        if ( not $version_ok ) {
+            printf "Evernote API version not up to date?\n";
+            exit(1)
+        }
+
+        my $note_store_url = $user_store->getNoteStoreUrl( $authentication_token );
+
+        warn "[INFO] note store url : $note_store_url \n" if $debug;
+        my $note_store_client = Thrift::HttpClient->new( $note_store_url );
+        # default timeout value may be too short
+        $note_store_client->setSendTimeout( 2000 );
+        $note_store_client->setRecvTimeout( 10000 );
+        my $note_store_prot = Thrift::BinaryProtocol->new( $note_store_client );
+
+        # search this class for API methods
+        $note_store = EDAMNoteStore::NoteStoreClient->new( $note_store_prot, $note_store_prot );
+    };
+
+    if ($@) {
+        my $err = $@;
+        die "Code: " . $$err{'code'} . ', ' . $$err{'message'};
+    }
+
+    return bless { 
+        debug             => $debug,
+        _authentication_token  => $authentication_token,
+        _notestore        => $note_store,
+        _authenticated    => 1, # safe to assume if we've gotten this far?
+    }, $class;
 }
 
-sub writeNote {
-    my $self = shift;
-    my $title = shift;
-    my $content = shift;
-    my $dataUrl = shift || "https://sandbox.evernote.com/edam/note";
+# TODO: make this is current
+sub createNote {
+    my ($self, $args) = @_;
+    my $authentication_token = $self->{_authentication_token};
+    my $client    = $self->{_notestore};
 
+    my $title = $$args{title};
+    my $content = $$args{content};
+    my $created = $$args{created};
+
+    # support notebook name?
+    my $notebook_guid = $$args{notebook_guid};
     $content =~ s/\n/<br\/>/g;
-    my $cont_encoded =<<EOF;
+
+     my $cont_encoded =<<EOF;
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">
 <en-note>
@@ -60,91 +116,208 @@ sub writeNote {
 </en-note>
 EOF
 
-    my $authToken = $self->{authToken};
-    my $shardId = $self->{shardId};
+    my $note_args = {
+        title   => $title,
+        content => $cont_encoded,
+    };
 
-    $dataUrl .= "/" . $shardId;
+    $$note_args{created} = $created if $created;
+    $$note_args{notebookGuid} = $notebook_guid if $notebook_guid;
 
-    my $transport = Thrift::HttpClient->new($dataUrl);
-    my $protocol  = Thrift::XS::BinaryProtocol->new($transport);
-    my $client    = EDAMNoteStore::NoteStoreClient->new($protocol);
+    my $tags;
 
-    $transport->open;
+    # if tag already exists, just uses it and doesn't overwrite it.
+    # Not sure if the eval is the best way to handle it but it seems
+    # to do the job
+    if (my $tag_args = $$args{tag_names}) {
+        # make sure this is an array ref
+        $tags = ref($tag_args) eq 'ARRAY' ? $tag_args: [$tag_args];
+        map {
+            my $tag = EDAMTypes::Tag->new({ name => $_ });
+            eval {
+                $client->createTag($authentication_token, $tag);
+            };
 
-    my $note = EDAMTypes::Note->new({ title => $title, 
-                                      content => $cont_encoded,
-                                    });
+            if ($@) {
+                # dump 'em in a ditch
+             }
+        } @$tags;
 
-    $client->createNote($authToken,$note);
+         $$note_args{tagNames} = $tags;
+    }
+
+    if (my $tag_guids = $$args{tag_guids}) {
+        my $guids = ref($tag_guids) eq 'ARRAY' ? $tag_guids : [$tag_guids];
+        $$note_args{tagGuids} = $guids;
+    }
+
+    my $note = EDAMTypes::Note->new($note_args);
+
+    return Net::Evernote::Note->new({
+        _obj        => $client->createNote($authentication_token, $note),
+        _notestore => $self->{_notestore},
+        _authentication_token       => $authentication_token,
+    });
 }
 
-sub delNote {
-    my $self = shift;
-    my $guid = shift;
-    my $dataUrl = shift || "https://sandbox.evernote.com/edam/note";
+sub deleteNote {
+    my ($self, $args) = @_;
+    my $guid = $$args{guid};
 
-    my $authToken = $self->{authToken};
-    my $shardId = $self->{shardId};
-
-    $dataUrl .= "/" . $shardId;
-
-    my $transport = Thrift::HttpClient->new($dataUrl);
-    my $protocol  = Thrift::XS::BinaryProtocol->new($transport);
-    my $client    = EDAMNoteStore::NoteStoreClient->new($protocol);
-
-    $transport->open;
+    my $authToken = $self->{_authentication_token};
+    my $client = $self->{_notestore};
 
     $client->deleteNote($authToken,$guid);
 }
 
 sub getNote {
-    my $self = shift;
-    my $guid = shift;
-    my $dataUrl = shift || "https://sandbox.evernote.com/edam/note";
+    my ($self, $args) = @_;
+    my $guid = $$args{guid};
 
-    my $authToken = $self->{authToken};
-    my $shardId = $self->{shardId};
+    my $client = $self->{_notestore};
+    my $authentication_token = $self->{_authentication_token};
 
-    $dataUrl .= "/" . $shardId;
+    return Net::Evernote::Note->new({
+        _obj        => $client->getNote($authentication_token, $guid, 1),
+        _notestore => $self->{_notestore},
+        _authentication_token       => $authentication_token,
+    });
+}
 
-    my $transport = Thrift::HttpClient->new($dataUrl);
-    my $protocol  = Thrift::XS::BinaryProtocol->new($transport);
-    my $client    = EDAMNoteStore::NoteStoreClient->new($protocol);
+sub getNotebook {
+    my ($self, $args) = @_;
+    my $guid = $$args{guid};
 
-    $transport->open;
+    my $client = $self->{_notestore};
+    my $authentication_token = $self->{_authentication_token};
 
-    $client->getNote($authToken,$guid,1);
+    my $notebook;
+    eval {
+        $notebook = Net::Evernote::Notebook->new({
+            _obj        => $client->getNotebook($authentication_token, $guid, 1),
+            _notestore => $self->{_notestore},
+            _authentication_token       => $authentication_token,
+        });
+    };
+
+    if (my $error = $@) {
+        # notebook not found
+        if (ref($error) eq 'EDAMNotFoundException') {
+            return;
+        }
+    }
+
+    return $notebook;
 }
 
 sub findNotes {
-    my $self = shift;
-    my $string = shift;
-    my $offset = shift || 0;
-    my $maxNotes = shift || 1;
-    my $dataUrl = shift || "https://sandbox.evernote.com/edam/note";
+    my ($self, $args) = @_;
+    my $string = $$args{string};
+    my $offset = $$args{offset} || 0;
+    my $maxNotes = $$args{maxCount} || 1;
 
-    my $authToken = $self->{authToken};
-    my $shardId = $self->{shardId};
+    my $authentication_token = $self->{_authentication_token};
 
-    $dataUrl .= "/" . $shardId;
     my $stru = EDAMNoteStore::NoteFilter->new({ words => $string });
+    my $client = $self->{_notestore};
 
-    my $transport = Thrift::HttpClient->new($dataUrl);
-    my $protocol  = Thrift::XS::BinaryProtocol->new($transport);
-    my $client    = EDAMNoteStore::NoteStoreClient->new($protocol);
-
-    $transport->open;
-
-    $client->findNotes($authToken,$stru,$offset,$maxNotes);
+    return $client->findNotes($authentication_token,$stru,$offset,$maxNotes);
 }
 
+sub listNotebooks {
+    my $self = shift;
+    my $client = $self->{_notestore};
+    return $client->listNotebooks($self->{_authentication_token});
+}
+
+sub createNotebook {
+    my ($self, $args) = @_;
+    my $client = $self->{_notestore};
+    my $notebook = EDAMTypes::Notebook->new({
+        name => $$args{name},
+    });
+
+    return Net::Evernote::Notebook->new({
+        _obj => $client->createNotebook($self->{_authentication_token}, $notebook),
+        _notestore => $self->{_notestore},
+    });
+}
+
+sub deleteNotebook {
+    my ($self, $args) = @_;
+    my $guid = $$args{guid};
+
+    my $authToken = $self->{_authentication_token};
+    my $client = $self->{_notestore};
+
+    return $client->expungeNotebook($authToken,$guid);
+}
+
+sub authenticated {
+    my $self = shift;
+    return $self->{_authenticated};
+}
+
+sub createTag {
+    my ($self, $args) = @_;
+    my $authentication_token = $self->{_authentication_token};
+    my $client    = $self->{_notestore};
+
+    my $name = $$args{name};
+
+    die "Name required to create tag\n" if !$name;
+
+    my $tag = EDAMTypes::Tag->new({ name => $name });
+
+    return Net::Evernote::Tag->new({
+        _obj        => $client->createTag($authentication_token, $tag),
+        _notestore => $self->{_notestore},
+        _authentication_token  => $authentication_token,
+    }); 
+}
+
+sub getTag {
+    my ($self, $args) = @_;
+    my $guid = $$args{guid};
+
+    my $client = $self->{_notestore};
+    my $authentication_token = $self->{_authentication_token};
+
+    my $tag;
+
+    eval {
+        $tag = Net::Evernote::Tag->new({
+            _obj        => $client->getTag($authentication_token, $guid, 1),
+            _notestore => $self->{_notestore},
+            _authentication_token       => $authentication_token,
+        });
+    };
+
+    if (my $error = $@) {
+        # tag not found
+        if (ref($error) eq 'EDAMNotFoundException') {
+            return;
+        }
+    }
+
+    return $tag;
+
+}
+
+sub deleteTag {
+    my ($self, $args) = @_;
+    my $ns = $self->{_notestore};
+
+    # FIXME: IS THIS EVEN POSSIBLE?
+    # I don't see any code for this yet in EDAMNoteStore::NoteStore.pm
+
+}
 
 1;
 
 =head1 NAME
 
-Net::Evernote - Perl client accessing to Evernote
-
+Net::Evernote - Perl API for Evernote
 
 =head1 VERSION
 
@@ -154,22 +327,29 @@ Version 0.06
 =head1 SYNOPSIS
 
     use Net::Evernote;
-    my $note = Net::Evernote->new($username, $password, $consumerKey, $consumerSecret);
+
+    my $evernote = Net::Evernote->new({
+        authentication_token => $authentication_token
+    });
 
     # write a note
-    my $res = $note->writeNote($title, $content);
+    my $res = $evernote->createNote({
+        title => $title,
+        content => $content
+    });
+
     my $guid = $res->guid;
 
     # get the note
-    my $thisNote = $note->getNote($guid);
+    my $thisNote = $evernote->getNote({ guid => $guid });
     print $thisNote->title,"\n";
     print $thisNote->content,"\n";
 
     # delete the note
-    $note->delNote($guid);
+    $evernote->deleteNote({ guid => $guid });
 
     # find notes
-    my $search = $note->findNotes("some words",0,5);
+    my $search = $evernote->findNotes({ keywords => $keywords, offset => $offset, max_notes => 5 });
     for my $thisNote ( @{$search->notes} ) {
         print $thisNote->guid,"\n";
         print $thisNote->title,"\n";
@@ -177,22 +357,21 @@ Version 0.06
 
 =head1 METHODS
 
-=head2 new(username, password, consumerKey, consumerSecret, [userStoreUrl])
+=head2 new({ authentication_token => $authentication_token })
 
 Initialize the object.
 
-    my $note = Net::Evernote->new("fooUser", "fooPasswd", "fooKey", "fooSecret");
+    my $evernote = Net::Evernote->new({
+        authentication_token => $authentication_token
+    });
 
-username and password are what you use for login into Evernote.
-
-consumerKey and consumerSecret are got from the email when you signed up to Evernote's API development.
 
 userStoreUrl is the url for user authentication, the default one is https://sandbox.evernote.com/edam/user
 
 If you are in the production development, userStoreUrl should be https://www.evernote.com/edam/user
 
 
-=head2 writeNote(title, content, [dataStoreUrl])
+=head2 writeNote({ title => $title, content => $content })
 
 Write a note to Evernote's server.
 
@@ -209,7 +388,10 @@ EOF
     my ($res,$guid);
 
     eval {
-        $res = $note->writeNote($title, $content);
+        $res = $note->writeNote({
+            title => $title,
+            content => $content
+        });
     };
 
     if ($@) {
@@ -231,7 +413,7 @@ are internally referred to using a globally unique identifier that is written in
 a standard string format, for example, "8743428c-ef91-4d05-9e7c-4a2e856e813a".
 
 
-=head2 getNote(guid, [dataStoreUrl])
+=head2 getNote({ guid => $guid })
 
 Get the note from the server.
 
@@ -239,7 +421,7 @@ Get the note from the server.
     my $thisNote;
 
     eval {
-        $thisNote = $note->getNote($guid);
+        $thisNote = $note->getNote({ guid => $guid });
     };
 
     if ($@) {
@@ -258,14 +440,14 @@ More stuff about ENML please see:
 http://www.evernote.com/about/developer/api/evernote-api.htm#_Toc297053072
 
 
-=head2 delNote(guid, [dataStoreUrl])
+=head2 delNote({ guid => $guid })
 
 Delete the note from Evernote's server.
 
     use Data::Dumper;
 
     eval {
-        $note->delNote($guid);
+        $note->delNote({ guid => $guid });
     };
 
     if ($@) {
@@ -278,7 +460,7 @@ Delete the note from Evernote's server.
 guid is the globally unique identifier for the note.
 
 
-=head2 findNotes(keywords, offset, maxNotes, [dataStoreUrl])
+=head2 findNotes({ keywords => $keywords, offset => $offset, max_notes => $maxNotes })
 
 Find the notes which contain the given keywords.
 
@@ -286,7 +468,7 @@ Find the notes which contain the given keywords.
     my $search;
 
     eval {
-        $search = $note->findNotes("some words",0,5);
+        $search = $note->findNotes({ keywords => "some words", offset => 0, max_notes => 5 });
     };
 
     if ($@) {
@@ -311,14 +493,11 @@ http://www.evernote.com/about/developer/api/
 
 =head1 AUTHOR
 
-Ken Peng <yhpeng@cpan.org>
-
-I wish any people who has the interest in this module to work together with it.
-
+David Collins <davidcollins4481@gmail.com>
 
 =head1 BUGS/LIMITATIONS
 
-If you have found bugs, please send email to <yhpeng@cpan.org>
+If you have found bugs, please send email to <davidcollins4481@gmail.com>
 
 
 =head1 SUPPORT
@@ -330,7 +509,7 @@ You can find documentation for this module with the perldoc command.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2011 Ken Peng, all rights reserved.
+Copyright 2013 David Collins, all rights reserved.
 
 This program is free software; you can redistribute it and/or modify 
 it under the same terms as Perl itself.
