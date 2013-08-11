@@ -9,23 +9,23 @@ BEGIN {
 use warnings;
 use strict;
 use Exception::Class (
-    'EDAMTest::Exception::ExceptionWrapper',
-    'EDAMTest::Exception::FileIOError',
+    'Net::Evernote::EDAMTest::Exception::ExceptionWrapper',
+    'Net::Evernote::EDAMTest::Exception::FileIOError',
 );
 
 use LWP::Protocol::https; # it is not needed to 'use' here, but it must be installed.
         # if it is not installed, an error (Thrift::TException object) is to be thrown.
 use Thrift::HttpClient;
 use Thrift::BinaryProtocol;
-use EDAMTypes::Types;  # you must do `use' EDAMTypes::Types and EDAMErrors::Types
-use EDAMErrors::Types; # before doing `use' EDAMUserStore::UserStore or EDAMNoteStore::NoteStore
-use EDAMUserStore::UserStore;
-use EDAMNoteStore::NoteStore;
-use EDAMUserStore::Constants;
+use Net::Evernote::EDAMTypes::Types;  # you must do `use' Net::Evernote::EDAMTypes::Types and Net::Evernote::EDAMErrors::Types
+use Net::Evernote::EDAMErrors::Types; # before doing `use' Net::Evernote::EDAMUserStore::UserStore or Net::Evernote::EDAMNoteStore::NoteStore
+use Net::Evernote::EDAMUserStore::UserStore;
+use Net::Evernote::EDAMNoteStore::NoteStore;
+use Net::Evernote::EDAMUserStore::Constants;
 use Evernote::Note;
 use Evernote::Tag;
 use Evernote::Notebook;
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 sub new {
     my ($class, $args) = @_;
@@ -48,7 +48,7 @@ sub new {
         local $SIG{__DIE__} = sub {
             my ( $err ) = @_;
             if ( not ( blessed $err && $err->isa('Exception::Class::Base') ) ) {
-                EDAMTest::Exception::ExceptionWrapper->throw( error => $err );
+                Net::Evernote::EDAMTest::Exception::ExceptionWrapper->throw( error => $err );
             }
         };
 
@@ -57,11 +57,11 @@ sub new {
         $user_store_client->setSendTimeout( 2000 );
         $user_store_client->setRecvTimeout( 10000 );
         my $user_store_prot = Thrift::BinaryProtocol->new( $user_store_client );
-        my $user_store = EDAMUserStore::UserStoreClient->new( $user_store_prot, $user_store_prot );
+        my $user_store = Net::Evernote::EDAMUserStore::UserStoreClient->new( $user_store_prot, $user_store_prot );
 
-        my $version_ok = $user_store->checkVersion( 'Evernote EDAMTest (Perl)',
-            EDAMUserStore::Constants::EDAM_VERSION_MAJOR,
-            EDAMUserStore::Constants::EDAM_VERSION_MINOR );
+        my $version_ok = $user_store->checkVersion( 'Evernote Net::Evernote::EDAMTest (Perl)',
+            Net::Evernote::EDAMUserStore::Constants::EDAM_VERSION_MAJOR,
+            Net::Evernote::EDAMUserStore::Constants::EDAM_VERSION_MINOR );
 
         if ( not $version_ok ) {
             printf "Evernote API version not up to date?\n";
@@ -78,7 +78,7 @@ sub new {
         my $note_store_prot = Thrift::BinaryProtocol->new( $note_store_client );
 
         # search this class for API methods
-        $note_store = EDAMNoteStore::NoteStoreClient->new( $note_store_prot, $note_store_prot );
+        $note_store = Net::Evernote::EDAMNoteStore::NoteStoreClient->new( $note_store_prot, $note_store_prot );
     };
 
     if ($@) {
@@ -133,7 +133,7 @@ EOF
         # make sure this is an array ref
         $tags = ref($tag_args) eq 'ARRAY' ? $tag_args: [$tag_args];
         map {
-            my $tag = EDAMTypes::Tag->new({ name => $_ });
+            my $tag = Net::Evernote::EDAMTypes::Tag->new({ name => $_ });
             eval {
                 $client->createTag($authentication_token, $tag);
             };
@@ -151,7 +151,7 @@ EOF
         $$note_args{tagGuids} = $guids;
     }
 
-    my $note = EDAMTypes::Note->new($note_args);
+    my $note = Net::Evernote::EDAMTypes::Note->new($note_args);
 
     return Net::Evernote::Note->new({
         _obj        => $client->createNote($authentication_token, $note),
@@ -202,7 +202,7 @@ sub getNotebook {
 
     if (my $error = $@) {
         # notebook not found
-        if (ref($error) eq 'EDAMNotFoundException') {
+        if (ref($error) eq 'Net::Evernote::EDAMNotFoundException') {
             return;
         }
     }
@@ -218,7 +218,7 @@ sub findNotes {
 
     my $authentication_token = $self->{_authentication_token};
 
-    my $stru = EDAMNoteStore::NoteFilter->new({ words => $string });
+    my $stru = Net::Evernote::EDAMNoteStore::NoteFilter->new({ words => $string });
     my $client = $self->{_notestore};
 
     return $client->findNotes($authentication_token,$stru,$offset,$maxNotes);
@@ -233,7 +233,7 @@ sub listNotebooks {
 sub createNotebook {
     my ($self, $args) = @_;
     my $client = $self->{_notestore};
-    my $notebook = EDAMTypes::Notebook->new({
+    my $notebook = Net::Evernote::EDAMTypes::Notebook->new({
         name => $$args{name},
     });
 
@@ -267,7 +267,7 @@ sub createTag {
 
     die "Name required to create tag\n" if !$name;
 
-    my $tag = EDAMTypes::Tag->new({ name => $name });
+    my $tag = Net::Evernote::EDAMTypes::Tag->new({ name => $name });
 
     return Net::Evernote::Tag->new({
         _obj        => $client->createTag($authentication_token, $tag),
@@ -295,7 +295,7 @@ sub getTag {
 
     if (my $error = $@) {
         # tag not found
-        if (ref($error) eq 'EDAMNotFoundException') {
+        if (ref($error) eq 'Net::Evernote::EDAMNotFoundException') {
             return;
         }
     }
@@ -309,7 +309,7 @@ sub deleteTag {
     my $ns = $self->{_notestore};
 
     # FIXME: IS THIS EVEN POSSIBLE?
-    # I don't see any code for this yet in EDAMNoteStore::NoteStore.pm
+    # I don't see any code for this yet in Net::Evernote::EDAMNoteStore::NoteStore.pm
 
 }
 

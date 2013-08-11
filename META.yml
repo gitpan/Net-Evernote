@@ -23,4 +23,4 @@ requires:
   LWP::UserAgent: 0
   Test::More: 0
   Thrift::XS: 0
-version: 0.07
+version: 0.08

@@ -2,6 +2,7 @@ package Net::Evernote::Note;
 
 use warnings;
 use strict;
+our $VERSION = '0.07';
 
 sub new {
     my ($class, $args) = @_;
