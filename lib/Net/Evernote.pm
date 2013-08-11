@@ -25,7 +25,7 @@ use Net::Evernote::EDAMUserStore::Constants;
 use Evernote::Note;
 use Evernote::Tag;
 use Evernote::Notebook;
-our $VERSION = '0.08';
+our $VERSION = '0.081';
 
 sub new {
     my ($class, $args) = @_;
@@ -357,134 +357,7 @@ Version 0.06
 
 =head1 METHODS
 
-=head2 new({ authentication_token => $authentication_token })
-
-Initialize the object.
-
-    my $evernote = Net::Evernote->new({
-        authentication_token => $authentication_token
-    });
-
-
-userStoreUrl is the url for user authentication, the default one is https://sandbox.evernote.com/edam/user
-
-If you are in the production development, userStoreUrl should be https://www.evernote.com/edam/user
-
-
-=head2 writeNote({ title => $title, content => $content })
-
-Write a note to Evernote's server.
-
-    use Data::Dumper;
-
-    my $title = "my Perl poem";
-    my $content =<<EOF;
-I wrote some Perl to say hello,
-To a world I did not know.
-Prepended line numbers there in tow,
-I basically told it where to go.
-EOF
-
-    my ($res,$guid);
-
-    eval {
-        $res = $note->writeNote({
-            title => $title,
-            content => $content
-        });
-    };
-
-    if ($@) {
-        print Dumper $@;
-
-    } else {
-        $guid = $res->guid;
-        print "GUID I got for this note is $guid\n";
-    }
-
-Both the title and content are strings.
-
-dataStoreUrl is the url for handling note, the default one is https://sandbox.evernote.com/edam/note
-
-If you are in the production development, dataStoreUrl should be https://www.evernote.com/edam/note
-
-About GUID: Most data elements within a user's account (e.g. notebooks, notes, tags, resources, etc.) 
-are internally referred to using a globally unique identifier that is written in 
-a standard string format, for example, "8743428c-ef91-4d05-9e7c-4a2e856e813a".
-
-
-=head2 getNote({ guid => $guid })
-
-Get the note from the server.
-
-    use Data::Dumper;
-    my $thisNote;
-
-    eval {
-        $thisNote = $note->getNote({ guid => $guid });
-    };
-
-    if ($@) {
-        print Dumper $@;
-
-    } else {
-        print $thisNote->title,"\n";
-        print $thisNote->content,"\n";
-    }
-
-guid is the globally unique identifier for the note.
-
-For the content returned, you must know that they are ENML compatible.
-More stuff about ENML please see:
-
-http://www.evernote.com/about/developer/api/evernote-api.htm#_Toc297053072
-
-
-=head2 delNote({ guid => $guid })
-
-Delete the note from Evernote's server.
-
-    use Data::Dumper;
-
-    eval {
-        $note->delNote({ guid => $guid });
-    };
-
-    if ($@) {
-        print Dumper $@;
-
-    } else {
-        print "note with GUID $guid deleted\n";
-    }
-    
-guid is the globally unique identifier for the note.
-
-
-=head2 findNotes({ keywords => $keywords, offset => $offset, max_notes => $maxNotes })
-
-Find the notes which contain the given keywords.
-
-    use Data::Dumper;
-    my $search;
-
-    eval {
-        $search = $note->findNotes({ keywords => "some words", offset => 0, max_notes => 5 });
-    };
-
-    if ($@) {
-        print Dumper $@;
-
-    } else {
-        for my $thisNote ( @{$search->notes} ) {
-            print $thisNote->guid,"\n";
-            print $thisNote->title,"\n";
-        }
-    }
-
-offset - The numeric index of the first note to show within the sorted results, default 0
-
-maxNotes - The most notes to return in this query, default 1
-
+More docs coming for this. 
 
 =head1 SEE ALSO
 
